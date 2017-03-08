@@ -1,0 +1,17 @@
+-- Simple staff time detail query for defined associates by logid (login ID).
+-- This will not sum to 100% as it's missing ringtime and some AUX 0 states that
+-- aren't associated with holdtime.
+
+DECLARE @START datetime = '12/1/16'
+DECLARE @END datetime = '12/2/16'
+
+SELECT row_date, (SUM(ti_stafftime)- sum(ti_auxtime9)*1.0)/3600 'ST'
+	,Sum(acdtime + acwtime + holdacdtime)*1.0 / (SUM(ti_stafftime)- sum(ti_auxtime9)) 'EFF'
+	,(Sum(ti_auxtime) - Sum(ti_auxtime0)- sum(ti_auxtime9))*1.0/ (SUM(ti_stafftime)- sum(ti_auxtime9)) 'AUX'
+	,Sum(ti_availtime)*1.0 / (SUM(ti_stafftime)- sum(ti_auxtime9)) 'Avail'
+FROM [CALL].asurion.dagent (nolock) 
+WHERE row_date between @START and @END
+	AND acd = 2
+	and logid = (***PLACE LOGID HERE***)
+GROUP BY row_date
+ORDER BY 1
