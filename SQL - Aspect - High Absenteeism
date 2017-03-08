@@ -2,7 +2,7 @@
 -- in the past week. The timeframe and threshold parameters are included as variables. The superstates considered
 -- as absenteeism are included on line 22 of the code below. My team uses this report weekly to ID agents who may 
 -- be job abandons or otherwise need to be removed from deviations. Inquries are sent to the operations team to 
--- determine the appropriate WFM action within Aspect..
+-- determine the appropriate WFM action within Aspect.
 
 DECLARE @END datetime =  CONVERT(DATE,GETDATE())			
 DECLARE @START datetime = DATEADD(dd,-7,@END)	
