@@ -1,0 +1,45 @@
+-- The SQL query below identifies those employees in Aspect who have absenteeism greater than a defined threshold
+-- in the past week. The timeframe and threshold parameters are included as variables. The superstates considered
+-- as absenteeism are included on line 22 of the code below. My team uses this report weekly to ID agents who may 
+-- be job abandons or otherwise need to be removed from deviations. Inquries are sent to the operations team to 
+-- determine the appropriate WFM action within Aspect..
+
+DECLARE @END datetime =  CONVERT(DATE,GETDATE())			
+DECLARE @START datetime = DATEADD(dd,-7,@END)	
+DECLARE @ABS_Threshold numeric(5,2) = 0.50
+	
+IF OBJECT_ID('tempdb..#ABS1') IS NOT NULL DROP TABLE #ABS1		
+IF OBJECT_ID('tempdb..#ABS2') IS NOT NULL DROP TABLE #ABS2		
+		
+SELECT LTRIM(RTRIM(x.EMP_ID)) 'EMP_ID',a.EMP_SK, x.EMP_SHORT_NAME 'Associate', x.EMP_CLASS_4 'Coach', c.CODE 'SS', SUM(b.MI) 'MI',COUNT(c.CODE) 'CT', DATEADD(dd,b.NOM_DATE,'12/30/1899') 'DTM'		
+	,z.Business_Unit, z.Site_Detailed 'Site', z.LOB
+INTO #ABS1		
+FROM TCS.dbo.EMP a  (nolock)		
+	INNER JOIN TCS.dbo.SPRSTATE_HRS b  (nolock) on a.EMP_SK=b.EMP_SK	
+	INNER JOIN TCS.dbo.SPRSTATE c  (nolock) ON b.SPRSTATE_SK=c.SPRSTATE_SK	
+	INNER JOIN adhoc_CARE.dbo.ICP_Aspect_Roster x (nolock) ON a.EMP_SK=x.EMP_SK	--Roster file from Aspect updated daily
+	INNER JOIN adhoc_CARE.dbo.Aspect_Site_Map z (nolock) ON  x.EMP_GRP_NODE_SK = z.EMP_GRP_NODE_SK	--Mapping table that isloates language, location, vendor, etc. based on Aspect site
+WHERE c.CODE IN('ALLABS','SCHDHR','NCNS')		
+	and b.NOM_DATE between convert(BIGINT, @START)+2 and convert(BIGINT, @END)+2 	
+	and z.Business_Unit IN('Mobility','Retail')
+	and x.EMP_ACD_INST = 'ACD2'
+GROUP BY x.EMP_ID,a.EMP_SK,  c.CODE, DATEADD(dd,b.NOM_DATE,'12/30/1899')	,z.Business_Unit, z.Site_Detailed, z.LOB, x.EMP_SHORT_NAME ,x.EMP_CLASS_4
+
+		
+select EMP_ID, EMP_SK, Associate, Coach, Business_Unit, [Site], LOB
+	,'ABS'=  CASE WHEN SS = 'ALLABS' THEN SUM(MI) ELSE 0 END
+	,'SCHDHR' =  CASE WHEN SS = 'SCHDHR' THEN SUM(MI) ELSE 0 END
+	,'NCNS' =  CASE WHEN SS = 'NCNS' THEN SUM(CT) ELSE 0 END
+	,'Shifts' =  CASE WHEN SS = 'SCHDHR' THEN SUM(CT) ELSE 0 END
+INTO #ABS2		
+from #ABS1 x		
+group by EMP_ID, EMP_SK, Associate, Coach, Business_Unit, [Site], LOB,SS
+	
+
+SELECT EMP_ID--,EMP_SK
+	, Associate, Coach, Business_Unit, [Site], LOB
+	,SUM(ABS)*1.0/SUM(SCHDHR) 'ABS%',SUM(NCNS) 'NCNS',SUM(Shifts) 'Shifts', SUM(SCHDHR)*1.0/60 'SCHDR'
+FROM #ABS2	
+GROUP BY EMP_ID,EMP_SK, Associate, Coach, Business_Unit, [Site], LOB
+HAVING SUM(ABS)*1.0/SUM(SCHDHR) >= @ABS_Threshold
+ORDER BY 8 DESC, 10 DESC	
