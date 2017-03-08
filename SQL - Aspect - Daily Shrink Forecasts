@@ -1,0 +1,47 @@
+-- Query below shows the daily shrink forecast for defined staff groups.
+-- This query is wholly contained within Aspect (TCS database).
+-- Also included in this folder is a similar query that shows interval shrink forecasts.
+
+IF OBJECT_ID('tempdb..#Base') IS NOT NULL DROP TABLE #Base
+
+CREATE TABLE #Base (CODE varchar(100), [Day] varchar(10),D_Shrink Numeric(10,2)) 
+INSERT INTO #Base
+SELECT grp.CODE,'Day' = CASE 
+	WHEN DOW = 0 THEN 'Sunday'
+	WHEN DOW = 1 THEN 'Monday'
+	WHEN DOW = 2 THEN 'Tuesday'
+	WHEN DOW = 3 THEN 'Wednesday'
+	WHEN DOW = 4 THEN 'Thursday'
+	WHEN DOW = 5 THEN 'Friday'
+	WHEN DOW = 6 THEN 'Saturday'
+	ELSE 'Other' END
+	, SUM(PCT)*1.0/COUNT(PCT) 'D_Shrink'
+FROM TCS.dbo.STF_GRP grp 
+	JOIN  TCS.dbo.STF_SHR_SET x on x.STF_GRP_SK = grp.STF_GRP_SK
+	JOIN TCS.dbo.STF_SHR_DET det on det.STF_SHR_SET_SK = x.STF_SHR_SET_SK
+	JOIN TCS.dbo.STF_SHR_CAT cat on cat.STF_SHR_CAT_SK = det.STF_SHR_CAT_SK
+WHERE grp.CODE IN(*** list of staff groups you want to include in shrink forecast ***)
+	AND cat.CODE =  'UNPROD' -- whatever your shrink code is. needs to be consistent for your groups.
+	AND x.CODE = 'IDP Week 1' --need to have a consistent code in Aspect for this to work.
+	AND PCT > 0.0
+GROUP BY grp.CODE,DOW
+ORDER BY 1,CASE WHEN DOW = 6 THEN 1
+	WHEN DOW = 0 THEN 2
+	WHEN DOW = 1 THEN 3
+	WHEN DOW = 2 THEN 4
+	WHEN DOW = 3 THEN 5
+	WHEN DOW = 4 THEN 6
+	WHEN DOW = 5 THEN 7
+	ELSE 8 END
+
+	
+SELECT CODE
+	,[Saturday] as 'Sat', [Sunday] as 'Sun', [Monday]as 'Mon', [Tuesday] as 'Tue'
+	,[Wednesday] as 'Wed', [Thursday] as 'Thu', [Friday] as 'Fri'
+FROM (SELECT CODE,D_Shrink,[Day] FROM #Base) x
+	PIVOT
+	(
+	SUM(D_Shrink)
+	FOR [Day] IN(Saturday, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday)
+	) z
+	
