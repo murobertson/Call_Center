@@ -1,10 +1,8 @@
--- Query below shows the daily shrink forecast for defined staff groups.
+-- Query below outputs daily and interval shrink forecasts for defined staff groups.
 -- This query is wholly contained within Aspect (TCS database).
--- Also included in this folder is a similar query that shows interval shrink forecasts.
 
 IF OBJECT_ID('tempdb..#Base') IS NOT NULL DROP TABLE #Base
-
-CREATE TABLE #Base (CODE varchar(100), [Day] varchar(10),D_Shrink Numeric(10,2)) 
+CREATE TABLE #Base (CODE varchar(100), [Day] varchar(10),D_Shrink Numeric(10,2), Interval Numeric(10,2)) 
 INSERT INTO #Base
 SELECT grp.CODE,'Day' = CASE 
 	WHEN DOW = 0 THEN 'Sunday'
@@ -16,15 +14,16 @@ SELECT grp.CODE,'Day' = CASE
 	WHEN DOW = 6 THEN 'Saturday'
 	ELSE 'Other' END
 	, SUM(PCT)*1.0/COUNT(PCT) 'D_Shrink'
+	, PER_NUM*0.5 'Interval'
 FROM TCS.dbo.STF_GRP grp 
 	JOIN  TCS.dbo.STF_SHR_SET x on x.STF_GRP_SK = grp.STF_GRP_SK
 	JOIN TCS.dbo.STF_SHR_DET det on det.STF_SHR_SET_SK = x.STF_SHR_SET_SK
 	JOIN TCS.dbo.STF_SHR_CAT cat on cat.STF_SHR_CAT_SK = det.STF_SHR_CAT_SK
-WHERE grp.CODE IN(*** list of staff groups you want to include in shrink forecast ***)
-	AND cat.CODE =  'UNPROD' -- whatever your shrink code is. needs to be consistent for your groups.
-	AND x.CODE = 'IDP Week 1' --need to have a consistent code in Aspect for this to work.
+WHERE grp.CODE IN(*** Place staff group code list here ***)
+	AND cat.CODE =  'UNPROD' -- Shrink category code needs to be consistent for selected staff groups 
+	AND x.CODE = 'IDP Week 1' -- Shrink set codes need to be consistent for selected staff groups
 	AND PCT > 0.0
-GROUP BY grp.CODE,DOW
+GROUP BY grp.CODE,DOW, PER_NUM
 ORDER BY 1,CASE WHEN DOW = 6 THEN 1
 	WHEN DOW = 0 THEN 2
 	WHEN DOW = 1 THEN 3
@@ -32,9 +31,10 @@ ORDER BY 1,CASE WHEN DOW = 6 THEN 1
 	WHEN DOW = 3 THEN 5
 	WHEN DOW = 4 THEN 6
 	WHEN DOW = 5 THEN 7
-	ELSE 8 END
+	ELSE 8 END,4
 
-	
+
+-- Daily Shrink Forecasts
 SELECT CODE
 	,[Saturday] as 'Sat', [Sunday] as 'Sun', [Monday]as 'Mon', [Tuesday] as 'Tue'
 	,[Wednesday] as 'Wed', [Thursday] as 'Thu', [Friday] as 'Fri'
@@ -44,4 +44,15 @@ FROM (SELECT CODE,D_Shrink,[Day] FROM #Base) x
 	SUM(D_Shrink)
 	FOR [Day] IN(Saturday, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday)
 	) z
-	
+
+-- Interval Shrink Forecasts
+SELECT CODE, Interval
+	,[Saturday] as 'Sat', [Sunday] as 'Sun', [Monday]as 'Mon', [Tuesday] as 'Tue'
+	,[Wednesday] as 'Wed', [Thursday] as 'Thu', [Friday] as 'Fri'
+FROM (SELECT CODE,Interval,D_Shrink,[Day] FROM #Base) x
+	PIVOT
+	(
+	SUM(D_Shrink)
+	FOR [Day] IN(Saturday, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday)
+	) z
+ORDER BY CODE, Interval
